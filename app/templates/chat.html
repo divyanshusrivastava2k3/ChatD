@@ -1,0 +1,1203 @@
+<!DOCTYPE html>
+<html lang="en" class="h-full max-h-screen overflow-hidden">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <title>ChatD - Modern Realtime Messages</title>
+  <script>
+    // Robust defensive bypass for "Uncaught TypeError: Cannot set property fetch of #<Window> which has only a getter"
+    (function() {
+      try {
+        const originalFetch = window.fetch || window.__proto__?.fetch || Window.prototype?.fetch;
+        if (originalFetch) {
+          let currentFetch = originalFetch;
+          const descriptor = {
+            get() { return currentFetch; },
+            set(val) { currentFetch = val; },
+            configurable: true,
+            enumerable: true
+          };
+
+          // Define on window itself
+          try {
+            Object.defineProperty(window, 'fetch', descriptor);
+          } catch (e) {
+            // If window itself is non-configurable, try prototypes
+          }
+
+          // Define on prototype chain
+          let proto = window.__proto__;
+          while (proto) {
+            try {
+              const d = Object.getOwnPropertyDescriptor(proto, 'fetch');
+              if (d && d.configurable) {
+                Object.defineProperty(proto, 'fetch', descriptor);
+                break;
+              }
+            } catch (e) {}
+            proto = proto.__proto__;
+          }
+
+          // Define on Window.prototype directly if accessible
+          if (typeof Window !== 'undefined' && Window.prototype) {
+            try {
+              Object.defineProperty(Window.prototype, 'fetch', descriptor);
+            } catch (e) {}
+          }
+        }
+      } catch (e) {
+        console.warn("Unable to redefine window.fetch:", e);
+      }
+    })();
+  </script>
+  <!-- Tailwind CSS CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          colors: {
+            violet: {
+              50: '#f5f3ff',
+              100: '#ede9fe',
+              200: '#ddd6fe',
+              300: '#c084fc',
+              400: '#a855f7',
+              500: '#8b5cf6',
+              600: '#7c3aed',
+              700: '#6d28d9',
+              800: '#5b21b6',
+              900: '#4c1d95',
+            }
+          }
+        }
+      }
+    }
+  </script>
+  <link rel="icon" type="image/png" sizes="32x32" href="/static/images/logo.png">
+  <link rel="icon" type="image/png" sizes="16x16" href="/static/images/logo.png">
+  <link rel="apple-touch-icon" href="/static/images/logo.png">
+  <script>
+    // Dynamic Favicon & Web Clipped Icon Cropper
+    (function() {
+      const img = new Image();
+      img.crossOrigin = 'anonymous';
+      img.onload = function() {
+        try {
+          const canvas = document.createElement('canvas');
+          canvas.width = 128;
+          canvas.height = 128;
+          const ctx = canvas.getContext('2d');
+          
+          const size = Math.min(img.width, img.height);
+          const sx = (img.width - size) / 2;
+          const sy = (img.height - size) / 2;
+          
+          ctx.drawImage(img, sx, sy, size, size, 0, 0, 128, 128);
+          const squareIconUrl = canvas.toDataURL('image/png');
+          
+          const links = document.querySelectorAll("link[rel*='icon']");
+          links.forEach(link => {
+            link.href = squareIconUrl;
+          });
+          
+          const appleLink = document.querySelector("link[rel='apple-touch-icon']");
+          if (appleLink) {
+            appleLink.href = squareIconUrl;
+          }
+        } catch (err) {
+          console.error("Favicon canvas cropping failed:", err);
+        }
+      };
+      img.src = '/static/images/logo.png';
+    })();
+  </script>
+  <!-- Google Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <!-- Stylesheet -->
+  <link rel="stylesheet" href="/static/css/styles.css">
+  <style>
+    html, body {
+      height: 100% !important;
+      height: 100dvh !important;
+      max-height: 100vh !important;
+      max-height: 100dvh !important;
+      margin: 0 !important;
+      padding: 0 !important;
+      overflow: hidden !important;
+    }
+    body {
+      font-family: 'Inter', sans-serif;
+    }
+    .custom-scrollbar::-webkit-scrollbar {
+      width: 6px;
+      height: 6px;
+    }
+    .custom-scrollbar::-webkit-scrollbar-track {
+      background: transparent;
+    }
+    .custom-scrollbar::-webkit-scrollbar-thumb {
+      background: #cbd5e1;
+      border-radius: 4px;
+    }
+    .dark .custom-scrollbar::-webkit-scrollbar-thumb {
+      background: #475569;
+    }
+    /* sliding drawers transition */
+    .drawer-transition {
+      transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+    @keyframes load-progress {
+      0% { width: 0%; }
+      50% { width: 45%; }
+      80% { width: 85%; }
+      100% { width: 100%; }
+    }
+    .animate-load-progress {
+      animation: load-progress 1.5s cubic-bezier(0.25, 1, 0.5, 1) forwards;
+    }
+  </style>
+</head>
+<body class="bg-slate-50 dark:bg-zinc-950 text-slate-800 dark:text-zinc-100 h-full max-h-full overflow-hidden transition-colors duration-200 w-full max-w-full overflow-x-hidden">
+
+  <!-- Premium Animated Splash Screen Overlay -->
+  <div id="splash-screen" class="fixed inset-0 bg-slate-50 dark:bg-zinc-950 flex flex-col items-center justify-center z-[9999] transition-opacity duration-700 ease-out">
+    <div class="relative flex flex-col items-center gap-6">
+      <div class="absolute -inset-8 bg-violet-600/10 dark:bg-violet-600/20 blur-2xl rounded-full"></div>
+      
+      <!-- App Splash Logo - perfectly scaled and styled -->
+      <div class="w-28 h-28 rounded-3xl overflow-hidden shadow-[0_12px_40px_rgba(139,92,246,0.25)] dark:shadow-[0_0_50px_rgba(139,92,246,0.4)] border-2 border-violet-500/25 relative z-10 bg-white select-none hover:scale-105 transition-all duration-300 flex items-center justify-center p-0">
+        <img src="/static/images/logo.png" alt="App Logo" class="w-full h-full object-cover scale-[1.32]" referrerPolicy="no-referrer">
+      </div>
+      
+      <div class="relative z-10 flex flex-col items-center">
+        <h2 class="text-3xl font-extrabold bg-gradient-to-r from-violet-600 to-indigo-600 dark:from-violet-400 dark:to-fuchsia-400 bg-clip-text text-transparent tracking-wide mt-2 font-sans select-none">ChatD</h2>
+        <p class="text-xs text-slate-500 dark:text-zinc-400 mt-1 font-medium font-sans tracking-wide">Realtime messaging. Pure elegance.</p>
+        <div class="w-40 h-[2px] bg-slate-200 dark:bg-zinc-800 rounded-full overflow-hidden mt-5">
+          <div class="h-full bg-gradient-to-r from-violet-500 to-fuchsia-500 rounded-full animate-load-progress"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Inject user details in data tags for JS integration -->
+  <div id="user-metadata" 
+       data-user-id="{{ user.id }}" 
+       data-username="{{ user.username }}" 
+       data-profile-picture="{{ user.profile_picture }}" 
+       data-mobile="{{ user.mobile }}" 
+       data-bio="{{ user.bio or '' }}"
+       data-joined="{{ user.joined_date }}"
+       data-theme="{{ settings.theme }}"
+       data-wallpaper="{{ settings.wallpaper }}"
+       data-seen-visibility="{{ settings.last_seen_visibility }}"
+       data-read-receipts="{{ settings.read_receipts }}"
+       data-sound="{{ settings.sound_enabled }}"
+       class="hidden"></div>
+
+  <!-- Audio ping for notifications -->
+  <audio id="message-sound" src="https://assets.mixkit.co/active_storage/sfx/2357/2357-84.wav" preload="auto"></audio>
+
+  <!-- Animated Dynamic Background 3D Glow Blobs (Frosted backing) -->
+  <div class="fixed -top-32 -left-32 w-120 h-120 rounded-full bg-violet-400/25 dark:bg-violet-950/15 blur-[120px] pointer-events-none select-none z-0"></div>
+  <div class="fixed top-1/2 left-1/3 w-96 h-96 rounded-full bg-fuchsia-400/20 dark:bg-fuchsia-950/10 blur-[120px] pointer-events-none select-none z-0" style="animation: pulse 8s infinite alternate;"></div>
+  <div class="fixed -bottom-40 -right-40 w-120 h-120 rounded-full bg-indigo-400/25 dark:bg-indigo-950/15 blur-[130px] pointer-events-none select-none z-0"></div>
+
+  <!-- Main App Layout wrapper -->
+  <div class="h-full max-h-full w-full max-w-full overflow-hidden flex relative z-10">
+
+    <!-- SIDEBAR PANEL -->
+    <div id="sidebar" class="w-full md:w-96 h-full max-h-full flex flex-col shrink-0 min-h-0 glass-sidebar z-10 transition-all duration-300 relative">
+      
+      <!-- Own Profile Header -->
+      <div class="p-4 border-b border-violet-500/20 flex items-center justify-between bg-gradient-to-r from-violet-600 to-violet-700 text-white shadow-md relative overflow-hidden">
+        <!-- Accent subtle wave lines overlay for extra polish -->
+        <div class="absolute inset-0 bg-[radial-gradient(circle_at_top_right,rgba(255,255,255,0.12),transparent_40%)] pointer-events-none"></div>
+        
+        <!-- App Name and Logo on the Left -->
+        <div class="flex items-center gap-2.5 relative z-10 select-none">
+          <div class="w-8 h-8 rounded-xl overflow-hidden bg-white flex items-center justify-center p-0 shadow-sm border border-white/10 select-none shrink-0">
+            <img src="/static/images/logo.png" alt="App Logo" class="w-full h-full object-cover scale-[1.3]" referrerPolicy="no-referrer">
+          </div>
+          <h1 class="text-base font-extrabold tracking-wide text-white leading-tight mt-0.5">ChatD</h1>
+        </div>
+        
+        <!-- Profile & Settings Controls on the Right -->
+        <div class="flex items-center gap-2 relative z-10">
+          <!-- Profile Trigger -->
+          <button onclick="toggleDrawer('profile-drawer', true)" title="My Profile"
+                  class="relative shrink-0 outline-none flex items-center justify-center">
+            <img id="my-avatar-img" src="{{ user.profile_picture }}" alt="My Avatar" 
+                 class="w-8 h-8 rounded-full object-cover border-2 border-white/85 hover:scale-105 transition-transform shadow-sm">
+          </button>
+
+          <!-- Settings Trigger -->
+          <button onclick="toggleDrawer('settings-drawer', true)" title="Settings"
+                  class="p-2 text-white/95 hover:text-white rounded-xl hover:bg-white/10 transition-all shrink-0">
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"></path>
+              <path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path>
+            </svg>
+          </button>
+        </div>
+      </div>
+
+      <!-- Search Contacts Bar -->
+      <div class="p-3 border-b border-slate-100 dark:border-zinc-800">
+        <div class="relative flex items-center">
+          <input type="text" id="contact-search" oninput="handleContactSearch()"
+                 class="w-full bg-slate-100 dark:bg-zinc-800 pl-10 pr-8 py-2.5 rounded-xl border-none focus:outline-none focus:ring-2 focus:ring-violet-500/50 text-xs font-medium dark:text-zinc-100 placeholder-slate-400 dark:placeholder-zinc-500 transition-all"
+                 placeholder="Search username or mobile number...">
+          <svg class="absolute left-3.5 w-5 h-5 text-slate-400 dark:text-zinc-500 pointer-events-none" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path>
+          </svg>
+          <button id="clear-search-btn" onclick="clearContactSearch()" class="absolute right-3 hidden text-slate-400 hover:text-slate-600 dark:text-zinc-500 dark:hover:text-zinc-300">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"></path></svg>
+          </button>
+        </div>
+      </div>
+
+      <!-- Tab Filters & Quick Controls (WhatsApp Style) -->
+      <div class="px-3 py-2 border-b border-slate-100 dark:border-zinc-850 flex items-center justify-between gap-1.5 bg-slate-50/50 dark:bg-zinc-900/10">
+        <!-- Segment selectors -->
+        <div class="flex items-center gap-1 shrink-0">
+          <button id="filter-all-btn" onclick="setChatFilter('all')" class="px-2.5 py-1.5 rounded-full text-[11px] font-bold transition-all bg-violet-600 text-white shadow-sm duration-200">
+            All
+          </button>
+          <button id="filter-chats-btn" onclick="setChatFilter('chats')" class="px-2.5 py-1.5 rounded-full text-[11px] font-bold transition-all bg-slate-100 dark:bg-zinc-800 text-slate-600 dark:text-zinc-400 hover:bg-slate-200 dark:hover:bg-zinc-700/80 duration-200">
+            Chats
+          </button>
+          <button id="filter-groups-btn" onclick="setChatFilter('groups')" class="px-2.5 py-1.5 rounded-full text-[11px] font-bold transition-all bg-slate-100 dark:bg-zinc-800 text-slate-600 dark:text-zinc-400 hover:bg-slate-200 dark:hover:bg-zinc-700/80 duration-200">
+            Groups
+          </button>
+        </div>
+        
+        <!-- Action Trigger -->
+        <button onclick="openCreateGroupModal()" class="flex items-center gap-1 px-2.5 py-1.5 rounded-xl bg-violet-50 hover:bg-violet-100 dark:bg-violet-950/30 dark:hover:bg-violet-900/30 text-violet-600 dark:text-violet-400 text-[11px] font-extrabold transition-all shrink-0 active:scale-95 duration-200">
+          <span>👥</span> New Group
+        </button>
+      </div>
+
+      <!-- Chats List Container -->
+      <div class="flex-1 overflow-y-auto custom-scrollbar relative">
+        <!-- Search Results Panel (layers above list when query exists) -->
+        <div id="search-results-overlay" class="absolute inset-0 bg-white dark:bg-zinc-900 z-10 hidden flex flex-col">
+          <div class="p-3 bg-violet-50/50 dark:bg-zinc-900 text-[10px] font-bold tracking-wider text-violet-600 dark:text-violet-400 uppercase border-b border-violet-100 dark:border-zinc-800">
+            Global Search Results
+          </div>
+          <div id="search-contacts-list" class="flex-1 overflow-y-auto custom-scrollbar division-y division-slate-100 dark:division-zinc-800">
+            <!-- Rendered search row -->
+          </div>
+        </div>
+
+        <!-- Real Chats List -->
+        <div id="chats-list" class="divide-y divide-slate-100 dark:divide-zinc-800/80">
+          <!-- Rendered chat tabs -->
+        </div>
+        
+        <!-- Empty Chats Placeholder -->
+        <div id="chats-empty-state" class="hidden flex flex-col items-center justify-center p-8 text-center h-full">
+          <div class="w-16 h-16 rounded-2xl bg-violet-50 dark:bg-violet-950/30 flex items-center justify-center mb-3">
+            <svg class="w-8 h-8 text-violet-500" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M17 8h2a2 2 0 012 2v6a2 2 0 01-2 2h-2v4l-4-4H9a1.994 1.994 0 01-1.414-.586m0 0L11 14h4a2 2 0 002-2V6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2v4l.586-.586z"></path>
+            </svg>
+          </div>
+          <p class="text-xs font-semibold text-slate-700 dark:text-zinc-300">No active conversations</p>
+          <p class="text-[10px] text-slate-400 dark:text-zinc-500 mt-1">Search or find contacts above to begin messaging.</p>
+        </div>
+      </div>
+
+      <!-- SUB-DRAWER: OWN PROFILE EDIT -->
+      <div id="profile-drawer" class="absolute inset-0 sub-drawer-glass z-40 translate-x-[-100%] drawer-transition flex flex-col">
+        <div class="p-4 bg-gradient-to-r from-violet-600 to-violet-700 text-white flex items-center gap-3 shadow-md">
+          <button onclick="toggleDrawer('profile-drawer', false)" class="p-1.5 hover:bg-white/10 rounded-xl transition-all">
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M15 19l-7-7 7-7"></path></svg>
+          </button>
+          <h2 class="font-bold text-base tracking-tight">My Profile</h2>
+        </div>
+        
+        <form id="profile-edit-form" onsubmit="handleProfileUpdate(event)" class="flex-1 overflow-y-auto p-6 space-y-5 custom-scrollbar">
+          <!-- Avatar Edit Area -->
+          <div class="flex flex-col items-center gap-2.5">
+            <div class="relative group cursor-pointer inline-block rounded-full overflow-hidden w-24 h-24 border-2 border-violet-500 shadow-md">
+              <img id="profile-drawer-avatar" src="{{ user.profile_picture }}" alt="Profile Avatar" class="w-full h-full object-cover">
+              <div class="absolute inset-0 bg-black/40 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+                <svg class="w-6 h-6 text-white" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z"></path>
+                  <path stroke-linecap="round" stroke-linejoin="round" d="M15 13a3 3 0 11-6 0 3 3 0 016 0z"></path>
+                </svg>
+              </div>
+              <input type="file" id="profile-avatar-input" accept="image/*" onchange="previewAvatar(event)" class="absolute inset-0 opacity-0 cursor-pointer">
+            </div>
+            <p class="text-[10px] text-slate-400 dark:text-zinc-500">Click avatar to select image</p>
+          </div>
+
+          <div>
+            <label class="block text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-1">Username</label>
+            <input type="text" id="profile-username" name="username" value="{{ user.username }}" required
+                   class="w-full px-4 py-2.5 rounded-xl text-sm font-semibold dark:text-zinc-100 input-3d">
+          </div>
+
+          <div>
+            <label class="block text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-1">Bio</label>
+            <textarea id="profile-bio" name="bio" rows="3"
+                      class="w-full px-4 py-2.5 rounded-xl text-sm dark:text-zinc-100 input-3d">{{ user.bio or '' }}</textarea>
+          </div>
+
+          <div class="pt-2">
+            <label class="block text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-1">Mobile Number</label>
+            <input type="text" value="{{ user.mobile }}" disabled
+                   class="w-full px-4 py-2.5 rounded-xl bg-slate-50 dark:bg-zinc-800/50 text-slate-400 dark:text-zinc-500 text-sm font-semibold input-3d">
+            <span class="text-[9px] text-slate-400 select-none">Mobile number cannot be edited.</span>
+          </div>
+
+          <button type="submit"
+                  class="w-full text-white py-2.5 rounded-xl font-bold text-sm btn-3d-violet mt-4">
+            Save Profile Changes
+          </button>
+        </form>
+      </div>
+
+      <!-- SUB-DRAWER: SETTINGS VIEW -->
+      <div id="settings-drawer" class="absolute inset-0 sub-drawer-glass z-40 translate-x-[-100%] drawer-transition flex flex-col">
+        <div class="p-4 bg-gradient-to-r from-violet-600 to-violet-700 text-white flex items-center gap-3 shadow-md">
+          <button onclick="toggleDrawer('settings-drawer', false)" class="p-1.5 hover:bg-white/10 rounded-xl transition-all">
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M15 19l-7-7 7-7"></path></svg>
+          </button>
+          <h2 class="font-bold text-base tracking-tight">Settings</h2>
+        </div>
+        
+        <div class="flex-1 overflow-y-auto p-5 space-y-6 custom-scrollbar">
+          <!-- Appearance Section -->
+          <div class="space-y-3">
+            <h3 class="text-xs font-bold uppercase tracking-wider text-violet-600 dark:text-violet-400">Appearance</h3>
+            
+            <!-- Theme Toggle -->
+            <div class="flex items-center justify-between p-3 rounded-xl bg-slate-50 dark:bg-zinc-800/40 border border-slate-100 dark:border-zinc-800/60">
+              <span class="text-xs font-semibold">Dark / Light Mode</span>
+              <button onclick="toggleThemeMode()" class="px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1 btn-3d bg-white text-slate-800 dark:bg-zinc-800 dark:text-zinc-100">
+                <span id="theme-btn-icon">☀️</span> <span id="theme-btn-text">Light</span>
+              </button>
+            </div>
+
+            <!-- Wallpaper Selector -->
+            <div>
+              <label class="block text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-2">Chat Wallpaper</label>
+              <div class="grid grid-cols-2 gap-2" id="wallpaper-visual-picker">
+                <!-- Option 1: Classic Default -->
+                <button type="button" onclick="updateWallpaperPreference('none')" data-wp-val="none"
+                        class="wp-swatch-btn flex items-center gap-2 p-2 rounded-xl border border-slate-200 dark:border-zinc-800 hover:border-violet-400 dark:hover:border-violet-500 transition-all text-left bg-white dark:bg-zinc-900/60 w-full outline-none">
+                  <span class="w-6 h-6 rounded-lg bg-slate-100 dark:bg-zinc-800 border border-slate-200/50 dark:border-zinc-700/50 shrink-0 shadow-inner flex items-center justify-center text-xs">⚪</span>
+                  <div class="flex flex-col">
+                    <span class="text-xs font-bold text-slate-800 dark:text-zinc-100 leading-tight">Default</span>
+                    <span class="text-[9px] text-slate-400 dark:text-zinc-500">Solid canvas</span>
+                  </div>
+                </button>
+                
+                <!-- Option 2: Lavender Mist -->
+                <button type="button" onclick="updateWallpaperPreference('violet-breeze')" data-wp-val="violet-breeze"
+                        class="wp-swatch-btn flex items-center gap-2 p-2 rounded-xl border border-slate-200 dark:border-zinc-800 hover:border-violet-400 dark:hover:border-violet-500 transition-all text-left bg-white dark:bg-zinc-900/60 w-full outline-none">
+                  <span class="w-6 h-6 rounded-lg bg-gradient-to-br from-indigo-100 to-purple-200 dark:from-violet-950 dark:to-indigo-900 border border-slate-200/50 dark:border-zinc-700/50 shrink-0 shadow-inner flex items-center justify-center text-xs">✨</span>
+                  <div class="flex flex-col">
+                    <span class="text-xs font-bold text-slate-800 dark:text-zinc-100 leading-tight">Lavender</span>
+                    <span class="text-[9px] text-slate-400 dark:text-zinc-500">Soft purple</span>
+                  </div>
+                </button>
+                
+                <!-- Option 3: Aura Sunset -->
+                <button type="button" onclick="updateWallpaperPreference('warm-sunset')" data-wp-val="warm-sunset"
+                        class="wp-swatch-btn flex items-center gap-2 p-2 rounded-xl border border-slate-200 dark:border-zinc-800 hover:border-violet-400 dark:hover:border-violet-500 transition-all text-left bg-white dark:bg-zinc-900/60 w-full outline-none">
+                  <span class="w-6 h-6 rounded-lg bg-gradient-to-br from-amber-50 to-orange-200 dark:from-amber-950 dark:to-rose-950 border border-slate-200/50 dark:border-zinc-700/50 shrink-0 shadow-inner flex items-center justify-center text-xs">🌅</span>
+                  <div class="flex flex-col">
+                    <span class="text-xs font-bold text-slate-800 dark:text-zinc-100 leading-tight">Sunset</span>
+                    <span class="text-[9px] text-slate-400 dark:text-zinc-500">Warm gradient</span>
+                  </div>
+                </button>
+
+                <!-- Option 4: Deep Space -->
+                <button type="button" onclick="updateWallpaperPreference('dark-nebula')" data-wp-val="dark-nebula"
+                        class="wp-swatch-btn flex items-center gap-2 p-2 rounded-xl border border-slate-200 dark:border-zinc-800 hover:border-violet-400 dark:hover:border-violet-500 transition-all text-left bg-white dark:bg-zinc-900/60 w-full outline-none">
+                  <span class="w-6 h-6 rounded-lg bg-gradient-to-br from-sky-100 to-sky-200 dark:from-slate-900 dark:to-indigo-950 border border-slate-200/50 dark:border-zinc-700/50 shrink-0 shadow-inner flex items-center justify-center text-xs">🌌</span>
+                  <div class="flex flex-col">
+                    <span class="text-xs font-bold text-slate-800 dark:text-zinc-100 leading-tight">Space</span>
+                    <span class="text-[9px] text-slate-400 dark:text-zinc-500">Galactic flow</span>
+                  </div>
+                </button>
+
+                <!-- Option 5: Emerald Jungle -->
+                <button type="button" onclick="updateWallpaperPreference('emerald-garden')" data-wp-val="emerald-garden"
+                        class="wp-swatch-btn flex items-center gap-2 p-2 rounded-xl border border-slate-200 dark:border-zinc-800 hover:border-violet-400 dark:hover:border-violet-500 transition-all text-left bg-white dark:bg-zinc-900/60 w-full outline-none col-span-2">
+                  <span class="w-6 h-6 rounded-lg bg-gradient-to-br from-emerald-50 to-green-200 dark:from-emerald-950 dark:to-zinc-900 border border-slate-200/50 dark:border-zinc-700/50 shrink-0 shadow-inner flex items-center justify-center text-xs">🌿</span>
+                  <div class="flex flex-col">
+                    <span class="text-xs font-bold text-slate-800 dark:text-zinc-100 leading-tight">Emerald Garden</span>
+                    <span class="text-[9px] text-slate-400 dark:text-zinc-500">Forest mint</span>
+                  </div>
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <!-- Privacy Settings -->
+          <div class="space-y-3">
+            <h3 class="text-xs font-bold uppercase tracking-wider text-violet-600 dark:text-violet-400">Privacy</h3>
+            
+            <div class="space-y-2">
+              <label class="flex items-center justify-between p-3 bg-slate-50 dark:bg-zinc-800/40 rounded-xl border border-slate-100 dark:border-zinc-800/60 cursor-pointer">
+                <span class="text-xs font-semibold">Show Last Seen status</span>
+                <input type="checkbox" id="setting-privacy-lastseen" onchange="updatePrivacyPreference('last_seen_visibility', this.checked)"
+                       class="checkbox-3d">
+              </label>
+
+              <label class="flex items-center justify-between p-3 bg-slate-50 dark:bg-zinc-800/40 rounded-xl border border-slate-100 dark:border-zinc-800/60 cursor-pointer">
+                <span class="text-xs font-semibold">Read Receipts (Blue Checkmarks)</span>
+                <input type="checkbox" id="setting-privacy-readreceipts" onchange="updatePrivacyPreference('read_receipts', this.checked)"
+                       class="checkbox-3d">
+              </label>
+            </div>
+          </div>
+
+          <!-- Notifications Section -->
+          <div class="space-y-3">
+            <h3 class="text-xs font-bold uppercase tracking-wider text-violet-600 dark:text-violet-400">Notifications</h3>
+            
+            <label class="flex items-center justify-between p-3 bg-slate-50 dark:bg-zinc-800/40 rounded-xl border border-slate-100 dark:border-zinc-800/60 cursor-pointer">
+              <span class="text-xs font-semibold">Sound Notifications</span>
+              <input type="checkbox" id="setting-sound" onchange="updatePrivacyPreference('sound_enabled', this.checked)"
+                     class="checkbox-3d">
+            </label>
+          </div>
+
+          <!-- Storage Controls -->
+          <div class="space-y-3">
+            <h3 class="text-xs font-bold uppercase tracking-wider text-violet-600 dark:text-violet-400">Storage & Session</h3>
+            
+            <button onclick="confirmClearSelectedChatHistory()" id="btn-clear-chat-setting" disabled
+                    class="w-full p-3 bg-rose-50 hover:bg-rose-100 text-rose-700 dark:bg-rose-950/20 dark:hover:bg-rose-950/40 dark:text-rose-400 rounded-xl text-left font-semibold text-xs border border-rose-100 dark:border-rose-900/30 shrink-0 transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
+              🗑️ Clear Active Contact Chat History
+            </button>
+          </div>
+
+          <!-- Account Area -->
+          <div class="space-y-3">
+            <h3 class="text-xs font-bold uppercase tracking-wider text-violet-600 dark:text-violet-400">Account Credentials</h3>
+            
+            <div class="space-y-2.5">
+              <input type="password" id="change-pw-old" placeholder="Current Password"
+                     class="w-full px-3.5 py-2.5 rounded-xl text-xs input-3d bg-transparent">
+              <input type="password" id="change-pw-new" placeholder="New Password (min 6 chars)"
+                     class="w-full px-3.5 py-2.5 rounded-xl text-xs input-3d bg-transparent">
+              <button onclick="handleChangePassword()"
+                      class="w-full py-2.5 rounded-xl text-xs font-bold transition-all btn-3d bg-slate-100 text-slate-800 dark:bg-zinc-800 dark:text-zinc-200">
+                Change Account Password
+              </button>
+            </div>
+            
+            <div id="change-pw-feedback" class="text-[10px] hidden rounded-lg p-2.5"></div>
+          </div>
+
+          <!-- Logout Option - EXCLUSIVELY inside Settings -->
+          <div class="pt-6 border-t border-slate-100 dark:border-zinc-800">
+            <a href="{{ url_for('auth.logout') }}"
+               class="flex items-center justify-center gap-2 w-full text-white py-3 rounded-xl font-bold text-sm btn-3d-rose">
+              <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"></path>
+              </svg>
+              <span>Logout Account</span>
+            </a>
+          </div>
+
+        </div>
+      </div>
+
+    </div>
+
+    <!-- RIGHT CHAT AREA WRAPPER -->
+    <div id="chat-window" class="hidden md:flex flex-1 flex-col h-full max-h-full min-h-0 min-w-0 w-full bg-slate-50 dark:bg-zinc-950/40 relative overflow-hidden">
+
+      <!-- Chat Idle State (no chat selected) -->
+      <div id="chat-idle-state" class="absolute inset-0 z-20 bg-slate-50 dark:bg-zinc-950 flex flex-col justify-center items-center text-center p-8">
+        <div class="w-20 h-20 rounded-3xl bg-violet-100/50 dark:bg-violet-950/20 flex items-center justify-center mb-4">
+          <svg class="w-10 h-10 text-violet-600 dark:text-violet-400 animate-pulse" fill="none" stroke="currentColor" stroke-width="2.2" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"></path>
+          </svg>
+        </div>
+        <h2 class="text-2xl font-bold tracking-tight text-slate-800 dark:text-zinc-100">Welcome to ChatD</h2>
+        <p class="text-slate-400 dark:text-zinc-500 font-medium text-sm max-w-sm mt-2">Connect in real-time, share files, and enjoy a clean desktop-class chatting interface.</p>
+        <span class="mt-6 text-[10px] bg-violet-50 dark:bg-violet-950/45 text-violet-600 dark:text-violet-400 font-bold tracking-wider uppercase px-3 py-1.5 rounded-full select-none">
+          Click a contact to begin chatting
+        </span>
+      </div>
+
+      <!-- Live Chat Interface -->
+      <div id="chat-live-interface" class="flex-1 flex flex-col h-full max-h-full min-h-0 relative overflow-hidden">
+        
+        <!-- Chat Header -->
+        <div class="px-5 py-3.5 glass-header flex items-center justify-between shrink-0 z-10 shadow-sm">
+          <div class="flex items-center gap-3">
+            <!-- Mobile Back Button -->
+            <button onclick="closeActiveChat()" class="md:hidden p-1 text-slate-500 hover:text-violet-600 dark:hover:text-violet-400 hover:bg-slate-100 rounded-xl mr-1 transition-colors">
+              <svg class="w-6 h-6" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M15 19l-7-7 7-7"></path>
+              </svg>
+            </button>
+            
+            <button onclick="toggleDrawer('recipient-drawer', true)" class="flex items-center gap-3 text-left group outline-none">
+              <div class="relative">
+                <img id="active-chat-avatar" src="/static/images/default_avatar.svg" alt="User Avatar" class="w-10 h-10 rounded-full object-cover border-2 border-slate-100 dark:border-zinc-800 group-hover:scale-[1.03] transition-transform">
+                <span id="active-chat-status-badge" class="absolute bottom-0 right-0 w-3 h-3 bg-gray-400 border-2 border-white dark:border-zinc-900 rounded-full"></span>
+              </div>
+              <div>
+                <h2 id="active-chat-username" class="font-bold text-sm text-slate-900 dark:text-zinc-100 group-hover:text-violet-600 dark:group-hover:text-violet-400 transition-colors">Recipient Name</h2>
+                <p id="active-chat-status-text" class="text-[10px] text-slate-400 dark:text-zinc-500 font-medium mt-0.5">Offline</p>
+              </div>
+            </button>
+          </div>
+          
+          <div class="flex items-center gap-1.5">
+            <!-- Search Specific Messages -->
+            <button onclick="toggleMessageSearchSearchBar()" class="p-2 text-slate-400 hover:text-slate-600 dark:hover:text-zinc-300 rounded-xl hover:bg-slate-100 dark:hover:bg-zinc-800 transition-all" title="Search messages">
+              <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path></svg>
+            </button>
+            
+            <!-- Recipient details Drawer Toggle -->
+            <button onclick="toggleDrawer('recipient-drawer', true)" class="p-2 text-slate-400 hover:text-slate-600 dark:hover:text-zinc-300 rounded-xl hover:bg-slate-100 dark:hover:bg-zinc-800 transition-all" title="Contact Details">
+              <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+            </button>
+          </div>
+        </div>
+
+        <!-- Inline Message Search Bar Overlay -->
+        <div id="message-search-bar" class="hidden px-5 py-2.5 bg-white/60 dark:bg-zinc-900/60 backdrop-blur-md border-b border-slate-100 dark:border-zinc-800/80 flex items-center gap-3 transition-all z-10">
+          <input type="text" id="message-search-input" oninput="handleMessageSearch()" placeholder="Search chat history..."
+                 class="flex-1 pl-4 pr-10 py-1.5 rounded-xl text-xs input-3d">
+          <button onclick="toggleMessageSearchSearchBar()" class="text-xs font-semibold text-slate-500 hover:text-slate-700">Done</button>
+        </div>
+
+        <!-- SCROLLABLE MESSAGES CONTAINER -- WITH DYNAMIC WALLPAPER CLASS -->
+        <div id="chat-messages-container" class="flex-1 overflow-y-auto overflow-x-hidden min-h-0 px-5 py-6 custom-scrollbar flex flex-col gap-3 relative transition-all">
+          <!-- Rendered messages bubbles dynamically -->
+        </div>
+
+        <!-- Typing Indicator Floating Segment -->
+        <div id="typing-indicator" class="hidden absolute bottom-20 left-6 z-20 flex items-center gap-2 bg-white/95 dark:bg-zinc-900/95 backdrop-blur-md border border-slate-105 dark:border-zinc-800/80 rounded-full py-1.5 px-3.5 shadow-md">
+          <span class="text-[10px] text-zinc-500 font-semibold italic"><span id="typing-actor">Somebody</span> is typing</span>
+          <div class="flex gap-1">
+            <span class="w-1 h-1 bg-violet-600 rounded-full animate-bounce" style="animation-delay: 0.1s"></span>
+            <span class="w-1 h-1 bg-violet-600 rounded-full animate-bounce" style="animation-delay: 0.2s"></span>
+            <span class="w-1 h-1 bg-violet-600 rounded-full animate-bounce" style="animation-delay: 0.3s"></span>
+          </div>
+        </div>
+
+        <!-- Float Replying preview layer directly above input board -->
+        <div id="replying-preview" class="hidden bg-white/50 dark:bg-zinc-900/50 backdrop-blur-lg border-t border-slate-100 dark:border-zinc-800/85 p-3 flex items-center justify-between gap-4 shrink-0 transition-all">
+          <div class="border-l-4 border-violet-500 pl-3">
+            <p class="text-[10px] font-bold text-violet-600 dark:text-violet-400">Replying to <span id="reply-target-author">User</span></p>
+            <p id="reply-target-snippet" class="text-xs text-slate-400 dark:text-zinc-500 truncate max-w-lg mt-0.5">Snippet of text...</p>
+          </div>
+          <button onclick="cancelMessageReply()" class="p-1 text-slate-400 hover:text-slate-600 dark:text-zinc-500 dark:hover:text-zinc-300 rounded-full">
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"></path></svg>
+          </button>
+        </div>
+
+        <!-- CHAT INPUT SECTION with Emojis and Attachments -->
+        <div id="chat-composer-section" class="p-3 bg-white/70 dark:bg-zinc-900/70 border-t border-slate-200/80 dark:border-zinc-800/80 flex flex-col shrink-0 relative z-10 backdrop-blur-md">
+          <div class="flex items-center gap-2">
+            
+            <!-- Trigger Attachments Menu -->
+            <div class="relative">
+              <button onclick="toggleAttachmentMenu()" id="btn-toggle-attachments"
+                      class="p-2.5 text-slate-400 hover:text-violet-600 dark:hover:text-violet-400 rounded-xl hover:bg-slate-100 dark:hover:bg-zinc-800 transition-all" title="Add File">
+                <svg class="w-6 h-6 transform rotate-45" fill="none" stroke="currentColor" stroke-width="2.2" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13"></path>
+                </svg>
+              </button>
+              
+              <!-- Floating Attachments selector list -->
+              <div id="attachments-panel" class="hidden absolute bottom-16 left-0 floating-shelf-glass rounded-2xl shadow-2xl p-2.5 flex flex-col w-60 gap-1.5 z-30 border border-violet-100/30 dark:border-zinc-800/80 transition-all duration-200">
+                <!-- PHOTO UPLOAD -->
+                <label class="flex items-center gap-3.5 p-2.5 hover:bg-violet-50/50 dark:hover:bg-zinc-800/85 rounded-xl cursor-pointer group transition-all duration-200">
+                  <div class="w-9 h-9 shrink-0 rounded-xl bg-orange-500/10 text-orange-600 dark:text-orange-400 group-hover:bg-orange-500 group-hover:text-white flex items-center justify-center transition-all duration-200 shadow-sm">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                      <rect width="18" height="18" x="3" y="3" rx="3" ry="3"/>
+                      <circle cx="9" cy="9" r="2.5"/>
+                      <path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21"/>
+                    </svg>
+                  </div>
+                  <div class="flex flex-col select-none">
+                    <span class="text-xs font-bold text-slate-700 dark:text-zinc-200 group-hover:text-violet-600 dark:group-hover:text-violet-400 transition-colors">Photo Upload</span>
+                    <span class="text-[9px] text-slate-400 dark:text-zinc-500 font-medium leading-none mt-0.5">JPG, PNG, GIF, WebP</span>
+                  </div>
+                  <input type="file" id="attach-img-input" accept="image/*" onchange="uploadAttachmentFile(this, 'file_image')" class="hidden">
+                </label>
+
+                <!-- ZIP ARCHIVE -->
+                <label class="flex items-center gap-3.5 p-2.5 hover:bg-violet-50/50 dark:hover:bg-zinc-800/85 rounded-xl cursor-pointer group transition-all duration-200">
+                  <div class="w-9 h-9 shrink-0 rounded-xl bg-amber-500/10 text-amber-600 dark:text-amber-400 group-hover:bg-amber-500 group-hover:text-white flex items-center justify-center transition-all duration-200 shadow-sm">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                      <rect width="20" height="14" x="2" y="7" rx="2"/>
+                      <path d="M6 3h12v4H6zm6 4v14"/>
+                    </svg>
+                  </div>
+                  <div class="flex flex-col select-none">
+                    <span class="text-xs font-bold text-slate-700 dark:text-zinc-200 group-hover:text-violet-600 dark:group-hover:text-violet-400 transition-colors">ZIP Archive</span>
+                    <span class="text-[9px] text-slate-400 dark:text-zinc-500 font-medium leading-none mt-0.5">Compress package file</span>
+                  </div>
+                  <input type="file" id="attach-zip-input" accept=".zip" onchange="uploadAttachmentFile(this, 'file_zip')" class="hidden">
+                </label>
+
+                <!-- PDF DOCUMENT -->
+                <label class="flex items-center gap-3.5 p-2.5 hover:bg-violet-50/50 dark:hover:bg-zinc-800/85 rounded-xl cursor-pointer group transition-all duration-200">
+                  <div class="w-9 h-9 shrink-0 rounded-xl bg-rose-500/10 text-rose-600 dark:text-rose-400 group-hover:bg-rose-500 group-hover:text-white flex items-center justify-center transition-all duration-200 shadow-sm">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                      <path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/>
+                      <polyline points="14 2 14 8 20 8"/>
+                    </svg>
+                  </div>
+                  <div class="flex flex-col select-none">
+                    <span class="text-xs font-bold text-slate-700 dark:text-zinc-200 group-hover:text-violet-600 dark:group-hover:text-violet-400 transition-colors">PDF Document</span>
+                    <span class="text-[9px] text-slate-400 dark:text-zinc-500 font-medium leading-none mt-0.5">Portable document report</span>
+                  </div>
+                  <input type="file" id="attach-pdf-input" accept=".pdf" onchange="uploadAttachmentFile(this, 'file_pdf')" class="hidden">
+                </label>
+
+                <!-- VIDEO SEND -->
+                <label class="flex items-center gap-3.5 p-2.5 hover:bg-violet-50/50 dark:hover:bg-zinc-800/85 rounded-xl cursor-pointer group transition-all duration-200">
+                  <div class="w-9 h-9 shrink-0 rounded-xl bg-fuchsia-500/10 text-fuchsia-600 dark:text-fuchsia-400 group-hover:bg-fuchsia-500 group-hover:text-white flex items-center justify-center transition-all duration-200 shadow-sm">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                      <path stroke-linecap="round" stroke-linejoin="round" d="M15 10l5-3v10l-5-3v-4z"/>
+                      <rect width="12" height="10" x="3" y="7" rx="2" ry="2"/>
+                    </svg>
+                  </div>
+                  <div class="flex flex-col select-none">
+                    <span class="text-xs font-bold text-slate-700 dark:text-zinc-200 group-hover:text-violet-600 dark:group-hover:text-violet-400 transition-colors">Video Send</span>
+                    <span class="text-[9px] text-slate-400 dark:text-zinc-500 font-medium leading-none mt-0.5">MP4, WebM, OGG, MOV</span>
+                  </div>
+                  <input type="file" id="attach-video-input" accept="video/*" onchange="uploadAttachmentFile(this, 'file_video')" class="hidden">
+                </label>
+              </div>
+            </div>
+
+            <!-- Trigger Emoji list panel -->
+            <div class="relative">
+              <button onclick="toggleEmojiPanel()" id="btn-toggle-emoji"
+                      class="p-2.5 text-slate-400 hover:text-violet-600 dark:hover:text-violet-400 rounded-xl hover:bg-slate-100 dark:hover:bg-zinc-800 transition-all" title="Insert Emoji">
+                <svg class="w-6 h-6" fill="none" stroke="currentColor" stroke-width="2.2" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" d="M14.828 14.828a4 4 0 01-5.656 0M9 10h.01M15 10h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                </svg>
+              </button>
+              
+              <!-- Floating Emoji Picker -->
+              <div id="emoji-keyboard-panel" class="hidden absolute bottom-14 left-0 floating-shelf-glass rounded-2xl shadow-xl p-3 grid grid-cols-6 gap-2 w-52 z-30 text-center">
+                <button onclick="insertEmojiChar('😊')" class="hover:scale-125 transition-transform text-lg py-0.5 outline-none">😊</button>
+                <button onclick="insertEmojiChar('😂')" class="hover:scale-125 transition-transform text-lg py-0.5 outline-none">😂</button>
+                <button onclick="insertEmojiChar('😍')" class="hover:scale-125 transition-transform text-lg py-0.5 outline-none">😍</button>
+                <button onclick="insertEmojiChar('👍')" class="hover:scale-125 transition-transform text-lg py-0.5 outline-none">👍</button>
+                <button onclick="insertEmojiChar('🔥')" class="hover:scale-125 transition-transform text-lg py-0.5 outline-none">🔥</button>
+                <button onclick="insertEmojiChar('🎉')" class="hover:scale-125 transition-transform text-lg py-0.5 outline-none">🎉</button>
+                <button onclick="insertEmojiChar('❤️')" class="hover:scale-125 transition-transform text-lg py-0.5 outline-none">❤️</button>
+                <button onclick="insertEmojiChar('✨')" class="hover:scale-125 transition-transform text-lg py-0.5 outline-none">✨</button>
+                <button onclick="insertEmojiChar('👀')" class="hover:scale-125 transition-transform text-lg py-0.5 outline-none">👀</button>
+                <button onclick="insertEmojiChar('✔️')" class="hover:scale-125 transition-transform text-lg py-0.5 outline-none">✔️</button>
+                <button onclick="insertEmojiChar('😜')" class="hover:scale-125 transition-transform text-lg py-0.5 outline-none">😜</button>
+                <button onclick="insertEmojiChar('😭')" class="hover:scale-125 transition-transform text-lg py-0.5 outline-none">😭</button>
+                <button onclick="insertEmojiChar('🙌')" class="hover:scale-125 transition-transform text-lg py-0.5 outline-none">🙌</button>
+                <button onclick="insertEmojiChar('🤔')" class="hover:scale-125 transition-transform text-lg py-0.5 outline-none">🤔</button>
+                <button onclick="insertEmojiChar('💬')" class="hover:scale-125 transition-transform text-lg py-0.5 outline-none">💬</button>
+                <button onclick="insertEmojiChar('🚀')" class="hover:scale-125 transition-transform text-lg py-0.5 outline-none">🚀</button>
+                <button onclick="insertEmojiChar('👋')" class="hover:scale-125 transition-transform text-lg py-0.5 outline-none">👋</button>
+                <button onclick="insertEmojiChar('💤')" class="hover:scale-125 transition-transform text-lg py-0.5 outline-none">💤</button>
+              </div>
+            </div>
+
+            <!-- Custom Input field -->
+            <input type="text" id="chat-text-input" oninput="handleTextInputChange()" onkeydown="handleInputKeys(event)"
+                   class="flex-1 px-4 py-3 rounded-xl text-slate-800 dark:text-zinc-100 font-semibold placeholder-slate-400/80 text-xs transition-colors input-3d bg-slate-50 dark:bg-zinc-900/50"
+                   placeholder="Type a message here...">
+
+            <!-- Send Trigger button -->
+            <button onclick="sendMessageAction()"
+                    class="p-3 rounded-xl text-white btn-3d-violet flex items-center justify-center shadow-lg transition-transform active:scale-[0.97]">
+              <svg class="w-5 h-5 transform rotate-90" fill="none" stroke="currentColor" stroke-width="2.3" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8"></path>
+              </svg>
+            </button>
+          </div>
+        </div>
+
+        <!-- BLOCKED INPUT NOTIFICATION (Only admins can send messages) -->
+        <div id="chat-blocked-composer" class="hidden p-4 bg-slate-100/70 dark:bg-zinc-900/40 border-t border-slate-200 dark:border-zinc-850 flex items-center justify-center shrink-0 text-center select-none backdrop-blur-md">
+          <p class="text-xs font-bold text-slate-400 dark:text-zinc-500 flex items-center gap-1.5">
+            <span>🔒</span> Only Admins can send messages to this group.
+          </p>
+        </div>
+
+        <!-- RIGHT SIDE SLIDING DRAWER: RECIPIENT PROFILE DETAILS -->
+        <div id="recipient-drawer" class="absolute top-0 right-0 bottom-0 drawer-glass z-40 w-full sm:w-80 translate-x-[100%] drawer-transition flex flex-col shadow-2xl overflow-hidden min-w-0">
+          <div class="p-4 border-b border-gray-100 dark:border-zinc-800 flex items-center justify-between bg-slate-50/50 dark:bg-zinc-900/50 shadow-sm">
+            <h2 class="font-bold text-base">Contact Details</h2>
+            <button onclick="toggleDrawer('recipient-drawer', false)" class="p-1.5 hover:bg-slate-100 dark:hover:bg-zinc-800 rounded-xl transition-all">
+              <svg class="w-6 h-6" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"></path></svg>
+            </button>
+          </div>
+          
+          <div class="flex-1 overflow-y-auto p-6 space-y-6 custom-scrollbar text-center min-w-0 max-w-full">
+            
+            <div class="flex flex-col items-center gap-3 min-w-0 max-w-full">
+              <img id="rec-drawer-avatar" src="/static/images/default_avatar.svg" alt="Avatar" class="w-24 h-24 rounded-full object-cover border-4 border-violet-500/35">
+              <div class="min-w-0 max-w-full">
+                <h3 id="rec-drawer-username" class="font-bold text-lg break-words break-all">Contact Username</h3>
+                <p id="rec-drawer-status" class="text-[10px] inline-block font-bold px-2 py-0.5 rounded-full mt-1.5 bg-gray-100 text-gray-500 dark:bg-zinc-800 dark:text-zinc-400">Offline</p>
+              </div>
+            </div>
+
+            <!-- Contact Specific Info -->
+            <div id="rec-drawer-contact-info" class="text-left space-y-4 pt-4 border-t border-slate-100 dark:border-zinc-800 min-w-0 max-w-full">
+              <div class="min-w-0 max-w-full">
+                <label class="block text-[10px] uppercase font-bold text-slate-400">Bio</label>
+                <p id="rec-drawer-bio" class="text-xs font-semibold mt-1 font-sans break-words break-all">Hey there! I am using ChatD.</p>
+              </div>
+
+              <div>
+                <label class="block text-[10px] uppercase font-bold text-slate-400">Mobile Number</label>
+                <p id="rec-drawer-mobile" class="text-xs font-semibold mt-1 font-sans">+00 00000 00000</p>
+              </div>
+
+              <div>
+                <label class="block text-[10px] uppercase font-bold text-slate-400">Last Seen</label>
+                <p id="rec-drawer-lastseen" class="text-xs font-semibold mt-1 font-sans">Recently</p>
+              </div>
+            </div>
+
+            <!-- Group Specific Info & Member Management panel -->
+            <div id="rec-drawer-group-info" class="text-left space-y-5 pt-4 border-t border-slate-100 dark:border-zinc-800 hidden min-w-0 max-w-full">
+              <div class="min-w-0 max-w-full">
+                <label class="block text-[10px] uppercase font-bold text-slate-400 dark:text-zinc-500">Group Description</label>
+                <p id="rec-drawer-group-desc" class="text-xs font-medium mt-1 text-slate-700 dark:text-zinc-300 font-sans break-words break-all">Default Group Description.</p>
+              </div>
+              <div id="group-admin-settings-section" class="bg-slate-50/60 dark:bg-zinc-900/40 p-4 rounded-2xl border border-slate-100 dark:border-zinc-800/80 space-y-4 shadow-sm hover:shadow-md transition-all duration-300">
+                <h4 class="text-xs font-bold text-slate-800 dark:text-zinc-200 flex items-center gap-2 border-b border-slate-100 dark:border-zinc-800 pb-2 mb-1">
+                  <span>⚙️</span> Group Options
+                </h4>
+                
+                <div class="space-y-3">
+                  <div>
+                    <label class="block text-[9.5px] uppercase tracking-wider font-extrabold text-slate-400 dark:text-zinc-500 mb-1">Group name</label>
+                    <input type="text" id="edit-group-name" class="w-full bg-white dark:bg-zinc-950 border border-slate-200 dark:border-zinc-800 rounded-xl px-3 py-2 text-xs focus:outline-none focus:ring-2 focus:ring-violet-500/20 focus:border-violet-500 font-semibold text-slate-800 dark:text-zinc-100 placeholder-slate-400 transition-all shadow-sm" placeholder="Group Name">
+                  </div>
+                  
+                  <div>
+                    <label class="block text-[9.5px] uppercase tracking-wider font-extrabold text-slate-400 dark:text-zinc-500 mb-1">Group description</label>
+                    <textarea id="edit-group-desc" class="w-full bg-white dark:bg-zinc-950 border border-slate-200 dark:border-zinc-800 rounded-xl px-3 py-2 text-xs focus:outline-none focus:ring-2 focus:ring-violet-500/20 focus:border-violet-500 h-16 resize-none font-semibold text-slate-800 dark:text-zinc-100 placeholder-slate-400 transition-all shadow-sm" placeholder="Group Description"></textarea>
+                  </div>
+
+                  <!-- WhatsApp-style settings block for Group Owner -->
+                  <div id="group-owner-permissions-ctrl" class="space-y-3 pt-3.5 border-t border-slate-200/65 dark:border-zinc-800/80">
+                    <h5 class="text-[9.5px] uppercase tracking-wider font-extrabold text-violet-500 dark:text-violet-400 flex items-center gap-1.5">
+                      <span>🛡️</span> Permission Controls
+                    </h5>
+                    
+                    <div class="space-y-3.5">
+                      <div>
+                        <label class="block text-[10px] font-extrabold text-slate-400 dark:text-zinc-500 uppercase tracking-wide mb-1.5">Who can change avatar / info</label>
+                        <div class="flex bg-slate-100 dark:bg-zinc-950 p-[3px] rounded-xl w-full border border-slate-150 dark:border-zinc-850" id="container-edit-permission">
+                          <button type="button" onclick="setSelectPermission('edit', 'all')" id="btn-edit-all" class="flex-1 py-1.5 text-xs rounded-lg transition-all text-center focus:outline-none flex items-center justify-center gap-1 cursor-pointer select-none">
+                            <span>👥</span>
+                            <span class="text-[10px] sm:text-xs">All Members</span>
+                          </button>
+                          <button type="button" onclick="setSelectPermission('edit', 'admins')" id="btn-edit-admins" class="flex-1 py-1.5 text-xs rounded-lg transition-all text-center focus:outline-none flex items-center justify-center gap-1 cursor-pointer select-none">
+                            <span>🔒</span>
+                            <span class="text-[10px] sm:text-xs">Only Admins</span>
+                          </button>
+                        </div>
+                        <input type="hidden" id="edit-group-edit-permission" value="all">
+                      </div>
+
+                      <div>
+                        <label class="block text-[10px] font-extrabold text-slate-400 dark:text-zinc-500 uppercase tracking-wide mb-1.5">Who can send messages</label>
+                        <div class="flex bg-slate-100 dark:bg-zinc-950 p-[3px] rounded-xl w-full border border-slate-150 dark:border-zinc-850" id="container-send-permission">
+                          <button type="button" onclick="setSelectPermission('send', 'all')" id="btn-send-all" class="flex-1 py-1.5 text-xs rounded-lg transition-all text-center focus:outline-none flex items-center justify-center gap-1 cursor-pointer select-none">
+                            <span>👥</span>
+                            <span class="text-[10px] sm:text-xs">All Members</span>
+                          </button>
+                          <button type="button" onclick="setSelectPermission('send', 'admins')" id="btn-send-admins" class="flex-1 py-1.5 text-xs rounded-lg transition-all text-center focus:outline-none flex items-center justify-center gap-1 cursor-pointer select-none">
+                            <span>🔒</span>
+                            <span class="text-[10px] sm:text-xs">Only Admins</span>
+                          </button>
+                        </div>
+                        <input type="hidden" id="edit-group-send-permission" value="all">
+                      </div>
+                    </div>
+                  </div>
+                  
+                  <div class="flex items-center gap-1.5 pt-1.5">
+                    <label class="text-[10px] font-extrabold text-slate-650 dark:text-zinc-300 cursor-pointer bg-slate-150/80 dark:bg-zinc-800 px-3 py-2 rounded-xl border border-slate-200 dark:border-zinc-700 hover:bg-slate-200 dark:hover:bg-zinc-750 transition-all shrink-0 shadow-sm flex items-center gap-1">
+                      📸 Avatar
+                      <input type="file" id="edit-group-avatar" class="hidden" accept="image/*">
+                    </label>
+                    <button onclick="saveGroupSettings()" class="flex-1 bg-violet-600 hover:bg-violet-700 text-white text-[11px] font-extrabold py-2 rounded-xl transition-all shadow-md shadow-violet-500/15 hover:shadow-violet-500/25 active:scale-95">Save Details</button>
+                  </div>
+                </div>
+              </div>
+              
+              <!-- Add member section for Admin -->
+              <div id="group-admin-add-section" class="bg-slate-50/60 dark:bg-zinc-900/40 p-4 rounded-2xl border border-slate-100 dark:border-zinc-800/80 space-y-3 shadow-sm hover:shadow-md transition-all duration-300">
+                <h4 class="text-xs font-bold text-slate-800 dark:text-zinc-200 flex items-center gap-2 border-b border-slate-100 dark:border-zinc-800 pb-2 mb-1">
+                  <span>➕</span> Add Group Member
+                </h4>
+                <div class="flex gap-2 relative w-full" id="custom-add-member-dropdown-container">
+                  <div class="relative flex-1">
+                    <button id="custom-add-member-trigger" onclick="toggleCustomAddMemberDropdown()" type="button" class="w-full flex items-center justify-between bg-white dark:bg-zinc-950 border border-slate-200 dark:border-zinc-800 rounded-xl px-3 py-2 text-xs font-semibold text-slate-800 dark:text-zinc-100 shadow-sm transition-all text-left hover:border-slate-350 dark:hover:border-zinc-700 cursor-pointer min-h-[36px]">
+                      <span id="custom-add-member-selected-text" class="truncate">Select user...</span>
+                      <span class="text-[9px] text-slate-400 dark:text-zinc-500">▼</span>
+                    </button>
+                    
+                    <!-- Floating absolute dropdown list -->
+                    <div id="custom-add-member-menu" class="absolute left-0 right-0 bottom-full mb-1 sm:bottom-auto sm:top-full sm:mt-1 z-50 hidden bg-white dark:bg-zinc-950 border border-slate-200 dark:border-zinc-800 rounded-xl shadow-xl p-2 space-y-1.5 w-full">
+                      <input type="text" id="custom-add-member-search" oninput="filterCustomAddMemberDropdown()" placeholder="Search user..." class="w-full bg-slate-50 dark:bg-zinc-900 border border-slate-150 dark:border-zinc-800/80 rounded-lg px-2.5 py-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-violet-500 font-semibold text-slate-700 dark:text-zinc-200 placeholder-slate-400">
+                      <div id="custom-add-member-list" class="max-h-32 overflow-y-auto custom-scrollbar space-y-1 pr-0.5">
+                        <!-- Loaded dynamically -->
+                      </div>
+                    </div>
+                  </div>
+                  <input type="hidden" id="group-add-member-select-value" value="">
+                  <button onclick="addGroupMember()" class="bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-extrabold px-3.5 py-2 rounded-xl transition-all shadow-md shadow-emerald-500/15 hover:shadow-emerald-500/25 active:scale-95 shrink-0">Add</button>
+                </div>
+              </div>
+
+              <!-- List of Members -->
+              <div class="space-y-2.5">
+                <label class="block text-[10px] uppercase font-extrabold text-slate-400 dark:text-zinc-500 tracking-wider">Group Members (<span id="group-member-count">0</span>)</label>
+                <div id="group-members-list" class="space-y-2 max-h-60 overflow-y-auto custom-scrollbar pr-1">
+                  <!-- Loaded dynamically -->
+                </div>
+              </div>
+
+              <!-- Leave Group Button -->
+              <button onclick="leaveGroup()" class="w-full py-2.5 bg-rose-500 hover:bg-rose-600 text-white font-bold text-xs rounded-xl shadow-lg hover:shadow-rose-500/10 transition-colors mt-2">
+                🚪 Leave Group Chat
+              </button>
+            </div>
+
+            <!-- Profile Media & Files Sections -->
+            <div class="text-left pt-6 border-t border-slate-100 dark:border-zinc-800 space-y-4">
+              <label class="block text-[10px] uppercase font-extrabold text-slate-400 dark:text-zinc-500 tracking-wider">Shared Files & Media</label>
+              
+              <!-- 1. IMAGES SECTION -->
+              <div class="bg-white/60 dark:bg-zinc-900/40 p-3.5 rounded-2xl border border-slate-100 dark:border-zinc-800/60 shadow-sm hover:shadow-md hover:bg-slate-50/70 dark:hover:bg-zinc-900/60 transition-all duration-350 space-y-2.5">
+                <div class="flex items-center justify-between">
+                  <span class="text-xs font-extrabold flex items-center gap-1.5 text-slate-800 dark:text-zinc-200">
+                    <span>🖼️</span> Images <span id="drawer-count-images" class="text-[9px] text-violet-500 font-extrabold ml-1 bg-violet-50 dark:bg-violet-955/40 px-2 py-0.5 rounded-md border border-violet-100/40 dark:border-violet-900/35">0</span>
+                  </span>
+                  <button onclick="openCategoryMediaModal('images')" class="text-[11px] font-bold text-violet-500 hover:text-violet-605 dark:hover:text-violet-400 flex items-center gap-0.5 group">
+                    <span>More</span> <span class="group-hover:translate-x-0.5 transition-transform duration-200">→</span>
+                  </button>
+                </div>
+                <!-- Mini inline preview (up to 3 items) -->
+                <div id="drawer-preview-images" class="grid grid-cols-3 gap-2 select-none min-h-0">
+                  <div class="col-span-3 text-[10px] text-slate-450 dark:text-zinc-500 italic py-1">No images shared</div>
+                </div>
+              </div>
+
+              <!-- 2. VIDEOS SECTION -->
+              <div class="bg-white/60 dark:bg-zinc-900/40 p-3.5 rounded-2xl border border-slate-100 dark:border-zinc-800/60 shadow-sm hover:shadow-md hover:bg-slate-50/70 dark:hover:bg-zinc-900/60 transition-all duration-350 space-y-2.5">
+                <div class="flex items-center justify-between">
+                  <span class="text-xs font-extrabold flex items-center gap-1.5 text-slate-800 dark:text-zinc-200">
+                    <span>🎥</span> Videos <span id="drawer-count-videos" class="text-[9px] text-fuchsia-500 font-extrabold ml-1 bg-fuchsia-50 dark:bg-fuchsia-955/40 px-2 py-0.5 rounded-md border border-fuchsia-100/40 dark:border-fuchsia-900/35">0</span>
+                  </span>
+                  <button onclick="openCategoryMediaModal('videos')" class="text-[11px] font-bold text-fuchsia-500 hover:text-fuchsia-605 dark:hover:text-fuchsia-400 flex items-center gap-0.5 group">
+                    <span>More</span> <span class="group-hover:translate-x-0.5 transition-transform duration-200">→</span>
+                  </button>
+                </div>
+                <!-- Mini inline preview (up to 3 items) -->
+                <div id="drawer-preview-videos" class="grid grid-cols-3 gap-2 select-none min-h-0">
+                  <div class="col-span-3 text-[10px] text-slate-450 dark:text-zinc-500 italic py-1">No videos shared</div>
+                </div>
+              </div>
+
+              <!-- 3. DOCUMENTS SECTION -->
+              <div class="bg-white/60 dark:bg-zinc-900/40 p-3.5 rounded-2xl border border-slate-100 dark:border-zinc-800/60 shadow-sm hover:shadow-md hover:bg-slate-50/70 dark:hover:bg-zinc-900/60 transition-all duration-350 space-y-2.5">
+                <div class="flex items-center justify-between">
+                  <span class="text-xs font-extrabold flex items-center gap-1.5 text-slate-800 dark:text-zinc-200">
+                    <span>📄</span> Documents <span id="drawer-count-documents" class="text-[9px] text-rose-500 font-extrabold ml-1 bg-rose-50 dark:bg-rose-955/40 px-2 py-0.5 rounded-md border border-rose-100/40 dark:border-rose-900/35">0</span>
+                  </span>
+                  <button onclick="openCategoryMediaModal('documents')" class="text-[11px] font-bold text-rose-500 hover:text-rose-605 dark:hover:text-rose-400 flex items-center gap-0.5 group">
+                    <span>More</span> <span class="group-hover:translate-x-0.5 transition-transform duration-200">→</span>
+                  </button>
+                </div>
+                <!-- Mini inline list (up to 3 document file items) -->
+                <div id="drawer-preview-documents" class="flex flex-col gap-1.5 min-h-0">
+                  <div class="text-[10px] text-slate-450 dark:text-zinc-500 italic py-1">No documents shared</div>
+                </div>
+              </div>
+
+              <!-- 4. LINKS SECTION -->
+              <div class="bg-white/60 dark:bg-zinc-900/40 p-3.5 rounded-2xl border border-slate-100 dark:border-zinc-800/60 shadow-sm hover:shadow-md hover:bg-slate-50/70 dark:hover:bg-zinc-900/60 transition-all duration-350 space-y-2.5">
+                <div class="flex items-center justify-between">
+                  <span class="text-xs font-extrabold flex items-center gap-1.5 text-slate-800 dark:text-zinc-200">
+                    <span>🔗</span> Links <span id="drawer-count-links" class="text-[9px] text-teal-500 font-extrabold ml-1 bg-teal-550 dark:bg-teal-955/40 px-2 py-0.5 rounded-md border border-teal-100/40 dark:border-teal-900/35">0</span>
+                  </span>
+                  <button onclick="openCategoryMediaModal('links')" class="text-[11px] font-bold text-teal-500 hover:text-teal-605 dark:hover:text-teal-400 flex items-center gap-0.5 group">
+                    <span>More</span> <span class="group-hover:translate-x-0.5 transition-transform duration-200">→</span>
+                  </button>
+                </div>
+                <!-- Mini inline list (up to 3 link entries) -->
+                <div id="drawer-preview-links" class="flex flex-col gap-1.5 min-h-0">
+                  <div class="text-[10px] text-slate-450 dark:text-zinc-500 italic py-1">No links shared</div>
+                </div>
+              </div>
+            </div> <div class="text-[10px] text-slate-405 dark:text-zinc-505 italic py-1">No links shared</div>
+                </div>
+              </div>
+            </div>
+
+          </div>
+        </div>
+
+      </div>
+
+    </div>
+
+    <!-- FLOAT FLOATING DROPDOWN MODAL FOR MESSAGE ACTIONS -->
+    <div id="msg-context-menu" class="hidden fixed floating-shelf-glass rounded-2xl shadow-2xl w-52 p-1.5 z-50 border border-slate-100/80 dark:border-zinc-800/90 animate-fade backdrop-blur-xl transition-all duration-200">
+      <!-- Premium Emoji Reaction Shelf -->
+      <div class="px-2 py-1.5 mb-1.5 bg-slate-50/60 dark:bg-zinc-950/40 rounded-xl flex justify-between items-center gap-1.5 select-none border border-slate-100/40 dark:border-zinc-800/30">
+        <button onclick="reactToMessage('👍')" class="hover:scale-135 hover:-translate-y-1 transition-all text-xl active:scale-95 duration-200 select-none cursor-pointer">👍</button>
+        <button onclick="reactToMessage('❤️')" class="hover:scale-135 hover:-translate-y-1 transition-all text-xl active:scale-95 duration-200 select-none cursor-pointer">❤️</button>
+        <button onclick="reactToMessage('😂')" class="hover:scale-135 hover:-translate-y-1 transition-all text-xl active:scale-95 duration-200 select-none cursor-pointer">😂</button>
+        <button onclick="reactToMessage('😮')" class="hover:scale-135 hover:-translate-y-1 transition-all text-xl active:scale-95 duration-200 select-none cursor-pointer">😮</button>
+        <button onclick="reactToMessage('😢')" class="hover:scale-135 hover:-translate-y-1 transition-all text-xl active:scale-95 duration-200 select-none cursor-pointer">😢</button>
+        <button onclick="reactToMessage('🙏')" class="hover:scale-135 hover:-translate-y-1 transition-all text-xl active:scale-95 duration-200 select-none cursor-pointer">🙏</button>
+      </div>
+
+      <!-- Action items -->
+      <div class="space-y-0.5">
+        <button onclick="contextActionReply()" class="group flex items-center gap-3 px-3 py-2 w-full text-xs font-bold text-slate-700 dark:text-zinc-200 hover:text-violet-600 dark:hover:text-violet-400 rounded-xl hover:bg-violet-50/60 dark:hover:bg-zinc-800/75 text-left transition-all duration-200">
+          <div class="w-7 h-7 rounded-lg bg-slate-100/80 dark:bg-zinc-800/50 flex items-center justify-center group-hover:bg-violet-100 dark:group-hover:bg-violet-955/40 transition-colors">
+            <svg class="w-3.5 h-3.5 text-slate-500 dark:text-zinc-400 group-hover:text-violet-600 dark:group-hover:text-violet-400 transition-colors" fill="none" stroke="currentColor" stroke-width="2.3" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M3 10h10a8 8 0 018 8v2M3 10l6 6m-6-6l6-6"></path>
+            </svg>
+          </div>
+          <span>Reply</span>
+        </button>
+
+        <button onclick="contextActionCopy()" class="group flex items-center gap-3 px-3 py-2 w-full text-xs font-bold text-slate-700 dark:text-zinc-200 hover:text-violet-600 dark:hover:text-violet-400 rounded-xl hover:bg-violet-50/60 dark:hover:bg-zinc-800/75 text-left transition-all duration-200">
+          <div class="w-7 h-7 rounded-lg bg-slate-100/80 dark:bg-zinc-800/50 flex items-center justify-center group-hover:bg-violet-100 dark:group-hover:bg-violet-955/40 transition-colors">
+            <svg class="w-3.5 h-3.5 text-slate-500 dark:text-zinc-400 group-hover:text-violet-600 dark:group-hover:text-violet-400 transition-colors" fill="none" stroke="currentColor" stroke-width="2.3" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M8 5H6a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2v-1M8 5a2 2 0 002 2h2a2 2 0 002-2M8 5a2 2 0 012-2h2a2 2 0 012 2m0 0h2a2 2 0 012 2v3m2 4H10m0 0l3-3m-3 3l3 3"></path>
+            </svg>
+          </div>
+          <span>Copy Message</span>
+        </button>
+
+        <button onclick="contextActionForward()" class="group flex items-center gap-3 px-3 py-2 w-full text-xs font-bold text-slate-700 dark:text-zinc-200 hover:text-violet-600 dark:hover:text-violet-400 rounded-xl hover:bg-violet-50/60 dark:hover:bg-zinc-800/75 text-left transition-all duration-200 border-b border-slate-100/50 dark:border-zinc-800/50 pb-2">
+          <div class="w-7 h-7 rounded-lg bg-slate-100/80 dark:bg-zinc-800/50 flex items-center justify-center group-hover:bg-violet-100 dark:group-hover:bg-violet-955/40 transition-colors">
+            <svg class="w-3.5 h-3.5 text-slate-500 dark:text-zinc-400 group-hover:text-violet-600 dark:group-hover:text-violet-400 transition-colors" fill="none" stroke="currentColor" stroke-width="2.3" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M13 5l7 7-7 7M5 5l7 7-7 7"></path>
+            </svg>
+          </div>
+          <span>Forward Message</span>
+        </button>
+        
+        <!-- Only visible for self messages -->
+        <button id="context-btn-delete-everyone" onclick="contextActionDelete('everyone')" class="group flex items-center gap-3 px-3 py-2 w-full text-xs font-bold text-rose-600 dark:text-rose-400 rounded-xl hover:bg-rose-50/80 dark:hover:bg-rose-950/20 text-left transition-all duration-200">
+          <div class="w-7 h-7 rounded-lg bg-rose-50/65 dark:bg-rose-950/15 flex items-center justify-center group-hover:bg-rose-105 dark:group-hover:bg-rose-900/30 transition-colors">
+            <svg class="w-3.5 h-3.5 text-rose-500 dark:text-rose-400" fill="none" stroke="currentColor" stroke-width="2.3" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path>
+            </svg>
+          </div>
+          <span>Delete for Everyone</span>
+        </button>
+        
+        <!-- Visible for everyone -->
+        <button onclick="contextActionDelete('self')" class="group flex items-center gap-3 px-3 py-2 w-full text-xs font-bold text-rose-600 dark:text-rose-400 rounded-xl hover:bg-rose-50/80 dark:hover:bg-rose-950/20 text-left transition-all duration-200">
+          <div class="w-7 h-7 rounded-lg bg-rose-50/65 dark:bg-rose-950/15 flex items-center justify-center group-hover:bg-rose-105 dark:group-hover:bg-rose-900/30 transition-colors">
+            <svg class="w-3.5 h-3.5 text-rose-500 dark:text-rose-400" fill="none" stroke="currentColor" stroke-width="2.3" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+            </svg>
+          </div>
+          <span>Delete for Me</span>
+        </button>
+      </div>
+    </div>
+
+    <!-- POPUP LIST SELECTOR MODAL FOR FORWARDING -->
+    <div id="forward-contact-modal" class="hidden fixed inset-0 bg-black/50 z-50 flex justify-center items-center p-4">
+      <div class="bg-white dark:bg-zinc-900 rounded-2xl max-w-sm w-full p-5 shadow-2xl flex flex-col max-h-96">
+        <div class="flex items-center justify-between pb-3 border-b border-slate-100 dark:border-zinc-800">
+          <h3 class="font-bold text-sm">Forward Message</h3>
+          <button onclick="closeForwardModal()" class="text-slate-400">
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"></path></svg>
+          </button>
+        </div>
+        <div id="forward-list-container" class="flex-1 overflow-y-auto py-3 divide-y divide-slate-100 dark:divide-zinc-800 custom-scrollbar">
+          <!-- Populated active chat rows to forward to -->
+        </div>
+      </div>
+    </div>
+
+    <!-- IN-APP IMAGE VIEWER MODAL (LIGHTBOX) -->
+    <div id="image-viewer-modal" class="hidden fixed inset-0 bg-black/95 z-[9999] flex-col justify-center items-center p-4 backdrop-blur-md" onclick="closeImageViewer()">
+      <!-- Close button on top right -->
+      <button onclick="closeImageViewer(); event.stopPropagation();" class="absolute top-4 right-4 p-2 bg-white/10 hover:bg-white/20 hover:scale-105 active:scale-95 text-white rounded-full transition-all focus:outline-none z-50">
+        <svg class="w-6 h-6" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"></path>
+        </svg>
+      </button>
+
+      <!-- Main image -->
+      <div class="relative max-w-4xl max-h-[80vh] flex items-center justify-center" onclick="event.stopPropagation();">
+        <img id="image-viewer-img" src="" alt="View Image" class="max-w-full max-h-[85vh] rounded-xl object-contain shadow-2xl transition-all duration-300">
+      </div>
+
+      <!-- Action buttons -->
+      <div class="mt-4 flex gap-3 z-10" onclick="event.stopPropagation();">
+        <a id="image-viewer-download" href="" download class="px-5 py-2.5 bg-violet-600 hover:bg-violet-700 text-white text-xs font-bold rounded-xl shadow-lg hover:shadow-violet-500/10 transition-all transform active:scale-95 flex items-center gap-1.5">
+          <span>📥</span> Download Image
+        </a>
+      </div>
+    </div>
+
+    <!-- PREMIUM SHARED MEDIA OVERVIEW MODAL -->
+    <div id="shared-media-modal" class="hidden fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4 backdrop-blur-sm transition-all duration-300" onclick="closeCategoryMediaModal()">
+      <div id="shared-media-modal-card" class="bg-white dark:bg-zinc-900 rounded-3xl w-full max-w-xl h-[75vh] flex flex-col shadow-2xl overflow-hidden transform scale-95 opacity-0 transition-all duration-300" onclick="event.stopPropagation()">
+        <!-- Modal Header -->
+        <div class="px-6 py-4 border-b border-slate-100 dark:border-zinc-800/80 flex items-center justify-between bg-slate-50/50 dark:bg-zinc-900/50">
+          <div>
+            <h3 class="font-bold text-sm text-slate-800 dark:text-zinc-100">Shared Files & Media</h3>
+            <p class="text-[9px] text-slate-400 dark:text-zinc-500 font-bold uppercase tracking-wider">All Shared Media, Files & Links</p>
+          </div>
+          <button onclick="closeCategoryMediaModal()" class="p-2 bg-slate-100 dark:bg-zinc-800 text-slate-400 hover:text-slate-650 dark:hover:text-zinc-200 rounded-xl transition-all focus:outline-none">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+        </div>
+
+        <!-- Category Selector Tabs -->
+        <div class="px-5 py-2.5 bg-white dark:bg-zinc-900 border-b border-slate-100 dark:border-zinc-805/70 flex items-center gap-1.5 overflow-x-auto select-none custom-scrollbar shrink-0">
+          <button id="media-tab-images" onclick="switchMediaModalTab('images')" class="px-3.5 py-2 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all outline-none border border-transparent">
+            <span>🖼️</span> <span>Images</span> <span id="modal-badge-count-images" class="text-[9px] px-1.5 py-0.5 rounded-full font-black">0</span>
+          </button>
+          
+          <button id="media-tab-videos" onclick="switchMediaModalTab('videos')" class="px-3.5 py-2 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all outline-none border border-transparent">
+            <span>🎥</span> <span>Videos</span> <span id="modal-badge-count-videos" class="text-[9px] px-1.5 py-0.5 rounded-full font-black">0</span>
+          </button>
+          
+          <button id="media-tab-documents" onclick="switchMediaModalTab('documents')" class="px-3.5 py-2 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all outline-none border border-transparent">
+            <span>📄</span> <span>Docs</span> <span id="modal-badge-count-documents" class="text-[9px] px-1.5 py-0.5 rounded-full font-black">0</span>
+          </button>
+          
+          <button id="media-tab-links" onclick="switchMediaModalTab('links')" class="px-3.5 py-2 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all outline-none border border-transparent">
+            <span>🔗</span> <span>Links</span> <span id="modal-badge-count-links" class="text-[9px] px-1.5 py-0.5 rounded-full font-black">0</span>
+          </button>
+        </div>
+
+        <!-- Search Bar -->
+        <div class="px-5 py-2.5 border-b border-slate-100 dark:border-zinc-800/80 flex items-center bg-slate-50/20 dark:bg-zinc-905/10 shrink-0">
+          <div class="relative w-full">
+            <span class="absolute left-3 top-2.5 text-slate-400 text-xs">🔍</span>
+            <input type="text" id="media-modal-search" oninput="filterMediaModalItems()" placeholder="Search in shared category..." class="w-full pl-8 pr-4 py-2 rounded-xl bg-slate-50 dark:bg-zinc-900/50 border border-slate-100 dark:border-zinc-800 text-xs font-semibold placeholder-slate-400 focus:outline-none transition-all">
+          </div>
+        </div>
+
+        <!-- Scrollable Resource List -->
+        <div id="media-modal-list" class="flex-1 overflow-y-auto p-5 custom-scrollbar min-h-0 bg-slate-50/30 dark:bg-zinc-950/20">
+          <!-- Dynamic rendering based on selected catalog tab -->
+        </div>
+      </div>
+    </div>
+
+    <!-- CUSTOM CONFIRMATION MODAL -->
+    <div id="custom-confirm-modal" class="hidden fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[9999] flex items-center justify-center p-4 cursor-pointer" onclick="closeConfirmModal()">
+      <div class="w-full max-w-sm bg-white dark:bg-zinc-900 rounded-3xl overflow-hidden shadow-2xl border border-slate-100 dark:border-zinc-800/80 transform transition-all duration-300 scale-95 flex flex-col cursor-default" onclick="event.stopPropagation()">
+        <!-- Header banner -->
+        <div id="confirm-modal-header" class="px-6 py-4 bg-gradient-to-r from-violet-600 to-violet-700 text-white flex items-center gap-2.5">
+          <span id="confirm-modal-icon" class="text-lg">⚠️</span>
+          <h3 id="confirm-modal-title" class="font-black text-sm tracking-wide">Confirmation Required</h3>
+        </div>
+        
+        <!-- Content -->
+        <div class="p-6">
+          <p id="confirm-modal-message" class="text-xs text-slate-650 dark:text-zinc-300 leading-relaxed font-semibold">Are you sure you want to perform this action?</p>
+        </div>
+        
+        <!-- Footer actions -->
+        <div class="px-6 py-4 bg-slate-50 dark:bg-zinc-900/35 border-t border-slate-100 dark:border-zinc-805 flex items-center justify-end gap-2.5">
+          <button onclick="closeConfirmModal()" class="px-4 py-2 text-xs font-extrabold rounded-xl text-slate-500 hover:text-slate-700 dark:text-zinc-400 hover:bg-slate-100 dark:hover:bg-zinc-800/60 transition-all cursor-pointer">Cancel</button>
+          <button id="confirm-modal-action-btn" class="px-5 py-2 text-xs font-extrabold rounded-xl text-white transition-all transform active:scale-95 cursor-pointer shadow-lg bg-violet-650 hover:bg-violet-700">Confirm</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- CREATE GROUP MODAL CONTAINER -->
+    <div id="create-group-modal" class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 hidden" onclick="closeCreateGroupModal()">
+      <!-- Modal Card -->
+      <div class="w-full max-w-md bg-white dark:bg-zinc-900 rounded-3xl overflow-hidden shadow-2xl border border-slate-100 dark:border-zinc-800/80 transform transition-all duration-300 scale-95 flex flex-col max-h-[85vh]" onclick="event.stopPropagation()">
+        <!-- Header -->
+        <div class="px-6 py-4.5 bg-gradient-to-r from-violet-600 to-violet-700 text-white flex items-center justify-between shadow-md">
+          <div class="flex items-center gap-2">
+            <span class="text-xl">👥</span>
+            <h3 class="font-bold text-base">Create New Group</h3>
+          </div>
+          <button onclick="closeCreateGroupModal()" class="p-1 hover:bg-white/10 rounded-lg transition-colors text-white">
+            <svg class="w-5.5 h-5.5" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"></path></svg>
+          </button>
+        </div>
+        
+        <!-- Body Scroll Area -->
+        <div class="p-6 overflow-y-auto space-y-4 flex-1 custom-scrollbar">
+          <!-- Group Info Inputs -->
+          <div class="space-y-3">
+            <div>
+              <label class="block text-[10px] uppercase font-extrabold tracking-wider text-slate-400 dark:text-zinc-500">Group Name *</label>
+              <input type="text" id="new-group-name" class="w-full mt-1.5 px-4 py-2.5 rounded-xl border border-slate-200 dark:border-zinc-800 bg-slate-50/70 dark:bg-zinc-855 text-xs font-semibold focus:ring-2 focus:ring-violet-500/50 focus:outline-none dark:text-zinc-100 transition-all cursor-text" placeholder="e.g. Work Squad, Friend circle">
+            </div>
+            <div>
+              <label class="block text-[10px] uppercase font-extrabold tracking-wider text-slate-400 dark:text-zinc-500">Description</label>
+              <textarea id="new-group-desc" class="w-full mt-1.5 px-4 py-2.5 rounded-xl border border-slate-200 dark:border-zinc-800 bg-slate-50/70 dark:bg-zinc-855 text-xs font-semibold focus:ring-2 focus:ring-violet-500/50 focus:outline-none dark:text-zinc-100 transition-all cursor-text h-18 resize-none" placeholder="What is this squad about?"></textarea>
+            </div>
+          </div>
+          
+          <!-- Add Initial Members Contacts list checkable buttons -->
+          <div class="space-y-3 pt-3 border-t border-slate-100 dark:border-zinc-800">
+            <label class="block text-[10px] uppercase font-extrabold tracking-wider text-slate-400 dark:text-zinc-500">Select Initial Members</label>
+            
+            <div id="create-group-contacts-list" class="space-y-1 max-h-48 overflow-y-auto custom-scrollbar p-1.5 border border-slate-150 dark:border-zinc-800 rounded-2xl bg-slate-50/50 dark:bg-zinc-850/20">
+              <!-- Loaded dynamically -->
+              <div class="text-[11px] text-slate-405 italic text-center py-4">No contacts found. Find people using search above to populate list!</div>
+            </div>
+          </div>
+        </div>
+        
+        <!-- Footer Button Actions -->
+        <div class="px-6 py-4 bg-slate-50 dark:bg-zinc-900 border-t border-slate-100 dark:border-zinc-805 flex items-center justify-end gap-2.5">
+          <button onclick="closeCreateGroupModal()" class="px-4 py-2 text-xs font-bold rounded-xl text-slate-500 hover:text-slate-700 dark:text-zinc-400 hover:bg-slate-100 dark:hover:bg-zinc-800 transition-all">Cancel</button>
+          <button onclick="submitCreateGroup()" class="px-5 py-2 text-xs font-bold rounded-xl bg-violet-600 hover:bg-violet-700 text-white shadow-lg shadow-violet-500/10 transition-all transform active:scale-95">Create Squad</button>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- Socket.io client from CDN fallback -->
+  <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
+  <!-- Main Application Logic script -->
+  <script src="/static/js/app.js"></script>
+  <script>
+    window.addEventListener('DOMContentLoaded', () => {
+      const splash = document.getElementById('splash-screen');
+      if (splash) {
+        setTimeout(() => {
+          splash.style.opacity = '0';
+          setTimeout(() => {
+            splash.classList.add('hidden');
+          }, 700);
+        }, 1500);
+      }
+    });
+  </script>
+</body>
+</html>

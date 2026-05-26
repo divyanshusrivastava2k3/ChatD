@@ -1,0 +1,15 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Default-deny catch-all safety net
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // Zero-Trust security rules for the backup store
+    // Only accessible backend-side using the Cloud default service account credentials
+    match /sqlite_backups/{document} {
+      allow read, write: if false;
+    }
+  }
+}

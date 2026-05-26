@@ -1,0 +1,47 @@
+{
+  "entities": {
+    "BackupMeta": {
+      "title": "BackupMeta",
+      "description": "Metadata for the SQLite database backup",
+      "type": "object",
+      "properties": {
+        "chunk_count": {
+          "type": "integer",
+          "description": "Total number of partition chunks"
+        },
+        "total_size": {
+          "type": "integer",
+          "description": "Total size of the SQLite database file in bytes"
+        },
+        "last_updated": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp of the last backup sync"
+        }
+      },
+      "required": ["chunk_count", "total_size"]
+    },
+    "BackupChunk": {
+      "title": "BackupChunk",
+      "description": "A split binary partition containing a section of the SQLite file",
+      "type": "object",
+      "properties": {
+        "data": {
+          "type": "string",
+          "description": "Raw database bytes chunk"
+        }
+      },
+      "required": ["data"]
+    }
+  },
+  "firestore": {
+    "/sqlite_backups/meta": {
+      "schema": "BackupMeta",
+      "description": "Database backup metadata locator document"
+    },
+    "/sqlite_backups/{chunkId}": {
+      "schema": "BackupChunk",
+      "description": "Standard binary file chunk document"
+    }
+  }
+}

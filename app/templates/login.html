@@ -1,0 +1,325 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <title>ChatD - Connect Instantly</title>
+  <link rel="icon" type="image/png" sizes="32x32" href="/static/images/logo.png">
+  <link rel="icon" type="image/png" sizes="16x16" href="/static/images/logo.png">
+  <link rel="apple-touch-icon" href="/static/images/logo.png">
+  <script>
+    // Robust defensive bypass for "Uncaught TypeError: Cannot set property fetch of #<Window> which has only a getter"
+    (function() {
+      try {
+        const originalFetch = window.fetch || window.__proto__?.fetch || Window.prototype?.fetch;
+        if (originalFetch) {
+          let currentFetch = originalFetch;
+          const descriptor = {
+            get() { return currentFetch; },
+            set(val) { currentFetch = val; },
+            configurable: true,
+            enumerable: true
+          };
+
+          // Define on window itself
+          try {
+            Object.defineProperty(window, 'fetch', descriptor);
+          } catch (e) {
+            // If window itself is non-configurable, try prototypes
+          }
+
+          // Define on prototype chain
+          let proto = window.__proto__;
+          while (proto) {
+            try {
+              const d = Object.getOwnPropertyDescriptor(proto, 'fetch');
+              if (d && d.configurable) {
+                Object.defineProperty(proto, 'fetch', descriptor);
+                break;
+              }
+            } catch (e) {}
+            proto = proto.__proto__;
+          }
+
+          // Define on Window.prototype directly if accessible
+          if (typeof Window !== 'undefined' && Window.prototype) {
+            try {
+              Object.defineProperty(Window.prototype, 'fetch', descriptor);
+            } catch (e) {}
+          }
+        }
+      } catch (e) {
+        console.warn("Unable to redefine window.fetch:", e);
+      }
+    })();
+
+    // Dynamic Favicon & Web Clipped Icon Cropper
+    (function() {
+      const img = new Image();
+      img.crossOrigin = 'anonymous';
+      img.onload = function() {
+        try {
+          const canvas = document.createElement('canvas');
+          canvas.width = 128;
+          canvas.height = 128;
+          const ctx = canvas.getContext('2d');
+          
+          const size = Math.min(img.width, img.height);
+          const sx = (img.width - size) / 2;
+          const sy = (img.height - size) / 2;
+          
+          ctx.drawImage(img, sx, sy, size, size, 0, 0, 128, 128);
+          const squareIconUrl = canvas.toDataURL('image/png');
+          
+          const links = document.querySelectorAll("link[rel*='icon']");
+          links.forEach(link => {
+            link.href = squareIconUrl;
+          });
+          
+          const appleLink = document.querySelector("link[rel='apple-touch-icon']");
+          if (appleLink) {
+            appleLink.href = squareIconUrl;
+          }
+        } catch (err) {
+          console.error("Favicon canvas cropping failed:", err);
+        }
+      };
+      img.src = '/static/images/logo.png';
+    })();
+  </script>
+  <!-- Tailwind CSS CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          colors: {
+            violet: {
+              50: '#f5f3ff',
+              100: '#ede9fe',
+              200: '#ddd6fe',
+              300: '#c084fc',
+              400: '#a855f7',
+              500: '#8b5cf6',
+              600: '#7c3aed',
+              700: '#6d28d9',
+              800: '#5b21b6',
+              900: '#4c1d95',
+            }
+          }
+        }
+      }
+    }
+  </script>
+  <!-- Google Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    body {
+      font-family: 'Inter', sans-serif;
+    }
+    @keyframes load-progress {
+      0% { width: 0%; }
+      50% { width: 45%; }
+      80% { width: 85%; }
+      100% { width: 100%; }
+    }
+    .animate-load-progress {
+      animation: load-progress 1.5s cubic-bezier(0.25, 1, 0.5, 1) forwards;
+    }
+  </style>
+</head>
+<body class="bg-gradient-to-tr from-violet-100 via-white to-violet-50 min-h-screen flex flex-col justify-center items-center p-4">
+
+  <!-- Premium Animated Splash Screen Overlay -->
+  <div id="splash-screen" class="fixed inset-0 bg-gradient-to-tr from-violet-50 via-white to-violet-100 flex flex-col items-center justify-center z-[9999] transition-opacity duration-700 ease-out">
+    <div class="relative flex flex-col items-center gap-6">
+      <div class="absolute -inset-8 bg-violet-600/10 blur-2xl rounded-full"></div>
+      
+      <!-- App Splash Logo - perfectly scaled and styled -->
+      <div class="w-28 h-28 rounded-3xl overflow-hidden shadow-[0_12px_40px_rgba(139,92,246,0.25)] border-2 border-violet-500/20 relative z-10 bg-white select-none hover:scale-105 transition-all duration-300 flex items-center justify-center p-0">
+        <img src="/static/images/logo.png" alt="App Logo" class="w-full h-full object-cover scale-[1.32]" referrerPolicy="no-referrer">
+      </div>
+      
+      <div class="relative z-10 flex flex-col items-center">
+        <h2 class="text-3xl font-extrabold bg-gradient-to-r from-violet-600 to-indigo-600 bg-clip-text text-transparent tracking-wide mt-2 font-sans select-none">ChatD</h2>
+        <p class="text-xs text-slate-600 mt-1 font-medium font-sans tracking-wide">Realtime messaging. Pure elegance.</p>
+        <div class="w-40 h-[2px] bg-slate-200 rounded-full overflow-hidden mt-5">
+          <div class="h-full bg-gradient-to-r from-violet-500 to-fuchsia-500 rounded-full animate-load-progress"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="w-full max-w-md bg-white rounded-2xl shadow-xl border border-violet-100 overflow-hidden transition-all duration-300 transform hover:shadow-2xl">
+    
+    <!-- Header -->
+    <div class="bg-gradient-to-r from-violet-600 to-violet-700 p-8 text-center text-white relative">
+      <div class="absolute inset-0 bg-violet-950 opacity-10 pattern-dots"></div>
+      <div class="relative z-10">
+        <div class="w-16 h-16 bg-white rounded-2xl overflow-hidden flex items-center justify-center mx-auto mb-3 border border-white/30 select-none shadow-lg hover:scale-105 transition-all duration-300 p-0">
+          <img src="/static/images/logo.png" alt="App Logo" class="w-full h-full object-cover scale-[1.3]" referrerPolicy="no-referrer">
+        </div>
+        <h1 class="text-3xl font-bold tracking-tight">ChatD</h1>
+        <p class="text-violet-100 text-sm mt-1">Realtime messaging. Pure elegance.</p>
+      </div>
+    </div>
+
+    <!-- Tab Selector -->
+    <div class="flex border-b border-violet-100">
+      <button onclick="switchTab('login')" id="btn-login" class="flex-1 py-4 text-center font-semibold text-sm transition-all duration-200 outline-none">
+        Log In
+      </button>
+      <button onclick="switchTab('signup')" id="btn-signup" class="flex-1 py-4 text-center font-semibold text-sm transition-all duration-200 outline-none">
+        Sign Up
+      </button>
+    </div>
+
+    <!-- Message Flash Box -->
+    <div class="px-6 pt-4">
+      {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+          {% for category, message in messages %}
+            <div class="p-3.5 rounded-xl text-sm mb-2 flex items-center gap-2 {% if category == 'success' %}bg-green-50 text-green-700 border border-green-100{% else %}bg-rose-50 text-rose-700 border border-rose-100{% endif %}">
+              {% if category == 'success' %}
+                <svg class="w-4 h-4 shrink-0" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd"></path></svg>
+              {% else %}
+                <svg class="w-4 h-4 shrink-0" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clip-rule="evenodd"></path></svg>
+              {% endif %}
+              <span>{{ message }}</span>
+            </div>
+          {% endfor %}
+        {% endif %}
+      {% endwith %}
+    </div>
+
+    <!-- Login Container -->
+    <div id="tab-login" class="p-8 hidden">
+      <form action="{{ url_for('auth.login') }}" method="POST" class="space-y-5">
+        <div>
+          <label class="block text-xs font-semibold uppercase tracking-wider text-gray-500 mb-1.5" for="login_id">Username or Mobile Number</label>
+          <input type="text" id="login_id" name="login_id" required 
+            class="w-full px-4 py-3 rounded-xl border border-gray-200 focus:outline-none focus:border-violet-500 focus:ring-2 focus:ring-violet-200 transition-all font-medium text-gray-800"
+            placeholder="Username or Mobile Number">
+        </div>
+
+        <div>
+          <label class="block text-xs font-semibold uppercase tracking-wider text-gray-500 mb-1.5" for="login_password">Password</label>
+          <input type="password" id="login_password" name="password" required 
+            class="w-full px-4 py-3 rounded-xl border border-gray-200 focus:outline-none focus:border-violet-500 focus:ring-2 focus:ring-violet-200 transition-all text-gray-800"
+            placeholder="••••••••">
+        </div>
+
+        <button type="submit" 
+          class="w-full bg-violet-600 hover:bg-violet-700 text-white font-semibold py-3.5 rounded-xl shadow-md hover:shadow-lg transition-transform duration-150 active:scale-[0.98] mt-2">
+          Sign In
+        </button>
+      </form>
+
+    </div>
+
+    <!-- Signup Container -->
+    <div id="tab-signup" class="p-8 hidden">
+      <form action="{{ url_for('auth.signup') }}" method="POST" class="space-y-4">
+        <div>
+          <label class="block text-xs font-semibold uppercase tracking-wider text-gray-500 mb-1.5" for="reg_mobile">Mobile Number (with country code)</label>
+          <input type="tel" id="reg_mobile" name="mobile" required 
+            class="w-full px-4 py-3 rounded-xl border border-gray-200 focus:outline-none focus:border-violet-500 focus:ring-2 focus:ring-violet-200 transition-all font-medium text-gray-800"
+            placeholder="Mobile Number">
+          <p class="text-[11px] text-gray-400 mt-1 font-medium select-none">Include country code starting with + followed by 10-digit number</p>
+        </div>
+
+        <div>
+          <label class="block text-xs font-semibold uppercase tracking-wider text-gray-500 mb-1.5" for="reg_username">Username</label>
+          <input type="text" id="reg_username" name="username" required 
+            class="w-full px-4 py-3 rounded-xl border border-gray-200 focus:outline-none focus:border-violet-500 focus:ring-2 focus:ring-violet-200 transition-all font-medium text-gray-800"
+            placeholder="Username">
+        </div>
+
+        <div>
+          <label class="block text-xs font-semibold uppercase tracking-wider text-gray-500 mb-1.5" for="reg_password">Password</label>
+          <input type="password" id="reg_password" name="password" required 
+            class="w-full px-4 py-3 rounded-xl border border-gray-200 focus:outline-none focus:border-violet-500 focus:ring-2 focus:ring-violet-200 transition-all text-gray-800"
+            placeholder="At least 6 characters">
+        </div>
+
+        <div>
+          <label class="block text-xs font-semibold uppercase tracking-wider text-gray-500 mb-1.5" for="reg_confirm_password">Confirm Password</label>
+          <input type="password" id="reg_confirm_password" name="confirm_password" required 
+            class="w-full px-4 py-3 rounded-xl border border-gray-200 focus:outline-none focus:border-violet-500 focus:ring-2 focus:ring-violet-200 transition-all text-gray-800"
+            placeholder="Re-enter password">
+        </div>
+
+        <button type="submit" 
+          class="w-full bg-violet-600 hover:bg-violet-700 text-white font-semibold py-3.5 rounded-xl shadow-md hover:shadow-lg transition-transform duration-150 active:scale-[0.98] mt-2">
+          Create Account
+        </button>
+      </form>
+    </div>
+
+  </div>
+
+  <p class="text-xs text-gray-400 mt-6 font-medium">© 2026 ChatD. Designed with elegance.</p>
+
+  <script>
+    // Handles toggling tabs
+    function switchTab(tab) {
+      const loginTab = document.getElementById('tab-login');
+      const signupTab = document.getElementById('tab-signup');
+      const btnLogin = document.getElementById('btn-login');
+      const btnSignup = document.getElementById('btn-signup');
+
+      if (tab === 'login') {
+        loginTab.classList.remove('hidden');
+        signupTab.classList.add('hidden');
+        btnLogin.className = "flex-1 py-4 text-center font-semibold text-sm border-b-2 border-violet-600 text-violet-600 outline-none";
+        btnSignup.className = "flex-1 py-4 text-center font-medium text-sm text-gray-400 hover:text-gray-600 border-b-2 border-transparent outline-none";
+      } else {
+        loginTab.classList.add('hidden');
+        signupTab.classList.remove('hidden');
+        btnLogin.className = "flex-1 py-4 text-center font-medium text-sm text-gray-400 hover:text-gray-600 border-b-2 border-transparent outline-none";
+        btnSignup.className = "flex-1 py-4 text-center font-semibold text-sm border-b-2 border-violet-600 text-violet-600 outline-none";
+      }
+    }
+
+    // Default tab initialization
+    const activeTab = "{{ active_tab }}";
+    if (activeTab === 'signup') {
+      switchTab('signup');
+    } else {
+      switchTab('login');
+    }
+
+    // Dynamic country code and 10-digit phone format verification
+    const mobileInput = document.getElementById('reg_mobile');
+    if (mobileInput) {
+      function validateMobile() {
+        const value = mobileInput.value.replace(/[\s\-\(\)]/g, '');
+        const regex = /^\+[1-9]\d{0,3}\d{10}$/;
+        if (!regex.test(value)) {
+          mobileInput.setCustomValidity('Must start with country code (e.g. +91) followed by exactly 10 digits.');
+        } else {
+          mobileInput.setCustomValidity('');
+        }
+      }
+      mobileInput.addEventListener('input', validateMobile);
+      mobileInput.addEventListener('change', validateMobile);
+    }
+
+    // Splash Screen fadeout logic
+    window.addEventListener('DOMContentLoaded', () => {
+      const splash = document.getElementById('splash-screen');
+      if (splash) {
+        setTimeout(() => {
+          splash.style.opacity = '0';
+          setTimeout(() => {
+            splash.classList.add('hidden');
+          }, 700);
+        }, 1500);
+      }
+    });
+  </script>
+</body>
+</html>

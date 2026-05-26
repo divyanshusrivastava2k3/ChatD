@@ -1,0 +1,6 @@
+{
+  "name": "ChatD",
+  "description": "A clean, modern, professional realtime messaging app.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
